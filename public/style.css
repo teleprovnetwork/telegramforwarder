@@ -1,0 +1,168 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --text: #1a1d21;
+  --muted: #667080;
+  --line: #e2e5ea;
+  --accent: #2563c9;
+  --accent-text: #ffffff;
+  --good: #17744a;
+  --good-bg: #e3f4ec;
+  --bad: #b3261e;
+  --bad-bg: #fbe9e7;
+  --warn: #8a5a00;
+  --warn-bg: #fdf3dc;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171b;
+    --panel: #1c2026;
+    --text: #e8eaed;
+    --muted: #9aa3af;
+    --line: #2e343c;
+    --accent: #5b93ec;
+    --accent-text: #0e1420;
+    --good: #6fd3a3;
+    --good-bg: #17332a;
+    --bad: #f2988f;
+    --bad-bg: #3a1f1d;
+    --warn: #e8c070;
+    --warn-bg: #382c14;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 64px; }
+
+h1 { margin: 0; font-size: 24px; }
+h2 { margin: 0 0 12px; font-size: 17px; }
+p { margin: 0 0 12px; }
+code { font: 13px ui-monospace, Consolas, monospace; }
+
+.muted { color: var(--muted); }
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+.top p { margin: 0; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.row-actions { text-align: right; white-space: nowrap; }
+.row-actions form { display: inline-block; margin-left: 4px; }
+time { white-space: nowrap; }
+
+section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  padding: 0;
+  background: none;
+  border: 0;
+  margin-bottom: 8px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+.stat .value { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat .label { color: var(--muted); font-size: 13px; }
+
+.schedule { font-size: 14px; }
+
+.notice { padding: 10px 12px; border-radius: 8px; overflow-wrap: anywhere; }
+.notice.good { background: var(--good-bg); color: var(--good); }
+.notice.bad { background: var(--bad-bg); color: var(--bad); }
+.notice.warn { background: var(--warn-bg); color: var(--warn); }
+
+.scroll { overflow-x: auto; margin-bottom: 12px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 13px;
+  white-space: nowrap;
+}
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.error { color: var(--bad); font-size: 13px; overflow-wrap: anywhere; }
+td.error { min-width: 220px; }
+
+details ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+
+.tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+}
+.tag.good { background: var(--good-bg); color: var(--good); border-color: transparent; }
+.tag.bad { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+
+button {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.danger { color: var(--bad); }
+
+input, select, textarea {
+  font: inherit;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+}
+textarea { font: 13px/1.5 ui-monospace, Consolas, monospace; resize: vertical; }
+
+.stack { display: grid; gap: 8px; }
+.stack label, .settings label { font-size: 14px; color: var(--muted); }
+
+.settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  align-items: end;
+}

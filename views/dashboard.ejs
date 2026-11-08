@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Forwarder bot</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <header class="top">
+    <div>
+      <h1>Forwarder bot</h1>
+      <p class="muted">@<%= bot.username %> · main channel: <strong><%= main || 'not set' %></strong></p>
+    </div>
+    <div class="actions">
+      <form method="post" action="/run"><button class="primary">Send now</button></form>
+      <form method="post" action="/pause"><button><%= settings.paused ? 'Resume' : 'Pause' %></button></form>
+    </div>
+  </header>
+
+  <% if (ok) { %><p class="notice good"><%= ok %></p><% } %>
+  <% if (err) { %><p class="notice bad"><%= err %></p><% } %>
+  <% warnings.forEach((warning) => { %><p class="notice warn"><%= warning %></p><% }) %>
+
+  <section class="stats">
+    <div class="stat"><span class="value"><%= pending %></span><span class="label">New posts waiting</span></div>
+    <div class="stat"><span class="value"><%= library %></span><span class="label">Old posts for random runs</span></div>
+    <div class="stat"><span class="value"><%= delivered24h %></span><span class="label">Messages delivered, 24h</span></div>
+    <div class="stat"><span class="value"><%= runs24h %></span><span class="label">Runs, 24h</span></div>
+  </section>
+
+  <p class="muted schedule">
+    <% if (running) { %>
+      Sending now.
+    <% } else if (settings.paused) { %>
+      Paused.
+    <% } else { %>
+      Next run: <time data-ts="<%= nextRunAt %>" data-next></time>.
+    <% } %>
+    Last run: <% if (lastRunAt) { %><time data-ts="<%= lastRunAt %>"></time><% } else { %>never<% } %>.
+    Last backup: <% if (backupAt) { %><time data-ts="<%= backupAt %>"></time><% } else { %>none since start<% } %>.
+  </p>
+
+  <section>
+    <h2>Child channels (<%= channels.length %>)</h2>
+    <% if (channels.length === 0) { %>
+      <p class="muted">None yet. Add some below.</p>
+    <% } else { %>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Channel</th><th>Status</th><th class="num">Delivered</th><th>Last sent</th><th>Last error</th><th></th></tr>
+        </thead>
+        <tbody>
+        <% channels.forEach((channel) => { %>
+          <tr>
+            <td><strong><%= channel.name %></strong><br><span class="muted"><%= channel.chat %></span></td>
+            <td>
+              <% if (!channel.enabled) { %><span class="tag">Off</span>
+              <% } else if (channel.stats?.lastError) { %><span class="tag bad">Failing</span>
+              <% } else { %><span class="tag good">On</span><% } %>
+            </td>
+            <td class="num"><%= channel.stats?.delivered ?? 0 %></td>
+            <td><% if (channel.stats?.lastSentAt) { %><time data-ts="<%= channel.stats.lastSentAt %>"></time><% } else { %>never<% } %></td>
+            <td class="error"><%= channel.stats?.lastError || '' %></td>
+            <td class="row-actions">
+              <form method="post" action="/channels/toggle">
+                <input type="hidden" name="chat" value="<%= channel.chat %>">
+                <button><%= channel.enabled ? 'Turn off' : 'Turn on' %></button>
+              </form>
+              <form method="post" action="/channels/remove" data-confirm="Remove <%= channel.name %>?">
+                <input type="hidden" name="chat" value="<%= channel.chat %>">
+                <button class="danger">Remove</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <% } %>
+
+    <form method="post" action="/channels/add" class="stack">
+      <label for="links">Add channels or groups, one link per line</label>
+      <textarea id="links" name="links" rows="3" placeholder="https://t.me/mychannel&#10;@anotherchannel&#10;-1001234567890"></textarea>
+      <div><button class="primary">Add</button></div>
+    </form>
+  </section>
+
+  <% if (chats.length > 0) { %>
+  <section>
+    <h2>Chats the bot is in</h2>
+    <p class="muted">Use this for private channels, since invite links can't be resolved. The bot lists a chat once it is added there, or when someone posts in it.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Chat</th><th>ID</th><th>Type</th><th>Bot role</th><th></th></tr></thead>
+        <tbody>
+        <% chats.forEach((chat) => { %>
+          <tr>
+            <td><strong><%= chat.title %></strong></td>
+            <td><code><%= chat.id %></code></td>
+            <td><%= chat.type %></td>
+            <td><%= chat.status %></td>
+            <td class="row-actions">
+              <form method="post" action="/channels/add">
+                <input type="hidden" name="links" value="<%= chat.id %>">
+                <input type="hidden" name="name" value="<%= chat.title %>">
+                <button>Add as child</button>
+              </form>
+              <form method="post" action="/channels/main">
+                <input type="hidden" name="chat" value="<%= chat.id %>">
+                <button>Set as main</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <% } %>
+
+  <section>
+    <h2>Recent runs</h2>
+    <% if (runs.length === 0) { %>
+      <p class="muted">No runs yet.</p>
+    <% } else { %>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Time</th><th>Type</th><th class="num">Posts</th><th class="num">Channels OK</th><th class="num">Failed</th><th class="num">Delivered</th><th>Details</th></tr></thead>
+        <tbody>
+        <% runs.forEach((run) => { %>
+          <tr>
+            <td><time data-ts="<%= run.at %>"></time></td>
+            <td><span class="tag"><%= run.type %></span><%= run.manual ? ' manual' : '' %></td>
+            <td class="num"><%= run.posts %></td>
+            <td class="num"><%= run.ok %></td>
+            <td class="num"><%= run.failed %></td>
+            <td class="num"><%= run.delivered %></td>
+            <td>
+              <% if (run.note) { %><span class="error"><%= run.note %></span><% } %>
+              <details>
+                <summary>Per channel</summary>
+                <ul>
+                <% run.results.forEach((result) => { %>
+                  <li><%= result.name %>: <%= result.ok ? `${result.delivered}/${result.expected} delivered` : result.error %></li>
+                <% }) %>
+                </ul>
+              </details>
+            </td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <% } %>
+  </section>
+
+  <section>
+    <h2>Next in the queue</h2>
+    <% if (queue.length === 0) { %>
+      <p class="muted">The queue is empty, so the next run sends random old posts.</p>
+    <% } else { %>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Message</th><th>Type</th><th>Preview</th><th>Received</th></tr></thead>
+        <tbody>
+        <% queue.forEach((item) => { %>
+          <tr>
+            <td>#<%= item.ids[0] %><%= item.ids.length > 1 ? ` (album of ${item.ids.length})` : '' %></td>
+            <td><%= item.kind %></td>
+            <td><%= item.preview %></td>
+            <td><time data-ts="<%= item.addedAt %>"></time></td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <% } %>
+  </section>
+
+  <section>
+    <h2>Settings</h2>
+    <form method="post" action="/settings" class="settings">
+      <label>Minutes between runs <input type="number" name="intervalMinutes" min="1" max="10080" value="<%= settings.intervalMinutes %>"></label>
+      <label>New posts per run <input type="number" name="newPerRun" min="1" max="100" value="<%= settings.newPerRun %>"></label>
+      <label>Random posts per run <input type="number" name="randomPerRun" min="0" max="100" value="<%= settings.randomPerRun %>"></label>
+      <label>Send as
+        <select name="mode">
+          <option value="forward" <%= settings.mode === 'forward' ? 'selected' : '' %>>Forward (shows the source)</option>
+          <option value="copy" <%= settings.mode === 'copy' ? 'selected' : '' %>>Copy (hides the source)</option>
+        </select>
+      </label>
+      <div><button class="primary">Save settings</button></div>
+    </form>
+  </section>
+
+  <section>
+    <h2>channels.json</h2>
+    <p class="muted">This is the whole file. Edit it here and save, or copy it into <code>channels.json</code> in your repo so the changes are in Git too.</p>
+    <form method="post" action="/config" class="stack">
+      <textarea id="config" name="json" rows="16" spellcheck="false"><%= configJson %></textarea>
+      <div class="actions">
+        <button type="button" id="copy">Copy JSON</button>
+        <button class="primary">Save file</button>
+      </div>
+    </form>
+  </section>
+</main>
+<script src="/dashboard.js"></script>
+</body>
+</html>

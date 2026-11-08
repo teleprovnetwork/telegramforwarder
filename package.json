@@ -1,0 +1,19 @@
+{
+  "name": "forwarder-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot that drip-forwards posts from one main channel to many child channels",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ejs": "^7.0.2",
+    "express": "^5.3.0"
+  }
+}
