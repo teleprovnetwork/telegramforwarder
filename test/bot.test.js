@@ -279,6 +279,22 @@ test('random runs use every old post before repeating any', async () => {
   assert.equal(new Set(tg.sent.flatMap((s) => s.ids)).size, 30);
 });
 
+test('random runs distribute different unique batches to each channel', async () => {
+  const { store, tg, scheduler } = setup({ children: ['-1002', '-1003', '-1004'], settings: { newPerRun: 100 } });
+  await store.load();
+  addPosts(store, 30);
+  await scheduler.run();
+  tg.sent.length = 0;
+
+  const run = await scheduler.run();
+  assert.equal(run.type, 'random');
+  assert.equal(tg.sent.length, 3);
+  for (const call of tg.sent) {
+    assert.equal(call.ids.length, 10);
+  }
+  assert.equal(new Set(tg.sent.flatMap((s) => s.ids)).size, 30);
+});
+
 test('pickRandom never returns more than exists', () => {
   assert.equal(pickRandom([{ sends: 1 }, { sends: 1 }], 10).length, 2);
   assert.equal(pickRandom([], 10).length, 0);

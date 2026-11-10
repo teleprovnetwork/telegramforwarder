@@ -7,14 +7,59 @@ const MAX_RUNS = 100;
 
 const MISSING_MESSAGE = /message.*(not found|to (forward|copy)|invalid)|MESSAGE_ID|no messages/i;
 
+/**
+ * Distributes random posts across targets so that each target receives
+ * a unique/different selection of posts within the run (minimizing overlap),
+ * while prioritizing posts with fewer lifetime sends.
+ */
+export function pickRandomForTargets(library, count, targetCount) {
+  if (!Array.isArray(library) || library.length === 0 || count <= 0 || targetCount <= 0) {
+    return Array.from({ length: targetCount }, () => []);
+  }
+
+  // If library has fewer or equal items than requested per channel,
+  // each channel gets the available posts in randomized order.
+  if (library.length <= count) {
+    return Array.from({ length: targetCount }, () => {
+      const shuffled = [...library];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    });
+  }
+
+  const runPicks = new Map();
+  const result = [];
+
+  for (let t = 0; t < targetCount; t++) {
+    const candidates = [...library];
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+
+    // Prioritize posts not yet picked in this run, then posts with fewer lifetime sends.
+    candidates.sort((a, b) => {
+      const runDiff = (runPicks.get(a) || 0) - (runPicks.get(b) || 0);
+      if (runDiff !== 0) return runDiff;
+      return (a.sends || 0) - (b.sends || 0);
+    });
+
+    const chosen = candidates.slice(0, count);
+    for (const item of chosen) {
+      runPicks.set(item, (runPicks.get(item) || 0) + 1);
+    }
+    result.push(chosen);
+  }
+
+  return result;
+}
+
 /** Random picks that favour the least-sent posts, so repeats come last. */
 export function pickRandom(library, count) {
-  const shuffled = [...library];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled.sort((a, b) => a.sends - b.sends).slice(0, count);
+  return pickRandomForTargets(library, count, 1)[0] || [];
 }
 
 /**
@@ -64,16 +109,17 @@ export class Scheduler {
 
     this.running = true;
     try {
-      const { items, type } = this.#chooseItems(settings);
+      const { itemsByTarget, type } = this.#chooseItems(settings, targets);
       store.state.lastRunAt = Date.now();
 
-      if (items.length === 0) {
+      const totalItems = itemsByTarget.reduce((sum, entry) => sum + entry.items.length, 0);
+      if (totalItems === 0) {
         store.save();
         return null;
       }
 
-      const results = await this.#sendToAll(targets, items, settings.mode);
-      const run = this.#recordRun({ type, manual, items, results });
+      const results = await this.#sendToAll(itemsByTarget, settings.mode);
+      const run = this.#recordRun({ type, manual, itemsByTarget, results });
       await store.flush();
       return run;
     } finally {
@@ -81,17 +127,30 @@ export class Scheduler {
     }
   }
 
-  #chooseItems(settings) {
+  #chooseItems(settings, targets) {
     const { queue, library } = this.store.state;
     const settled = queue.filter((item) => Date.now() - item.addedAt >= ALBUM_SETTLE_MS);
     const fresh = settled.slice(0, settings.newPerRun);
-    if (fresh.length > 0) return { items: fresh, type: 'new' };
-    return { items: pickRandom(library, settings.randomPerRun), type: 'random' };
+
+    if (fresh.length > 0) {
+      // New posts from the queue are broadcast to all enabled channels
+      return {
+        type: 'new',
+        itemsByTarget: targets.map((target) => ({ target, items: fresh })),
+      };
+    }
+
+    // In random mode, each channel receives a unique batch of random posts
+    const perChannelBatches = pickRandomForTargets(library, settings.randomPerRun, targets.length);
+    return {
+      type: 'random',
+      itemsByTarget: targets.map((target, index) => ({ target, items: perChannelBatches[index] || [] })),
+    };
   }
 
-  async #sendToAll(targets, items, mode) {
+  async #sendToAll(itemsByTarget, mode) {
     const results = [];
-    for (const [index, target] of targets.entries()) {
+    for (const [index, { target, items }] of itemsByTarget.entries()) {
       if (index > 0) await sleep(this.gapMs);
       results.push(await this.#sendToOne(target, items, mode));
     }
@@ -112,11 +171,11 @@ export class Scheduler {
       stats.delivered += delivered;
       stats.lastSentAt = Date.now();
       stats.lastError = '';
-      return { name: target.name, chat: target.chat, ok: true, delivered, expected };
+      return { name: target.name, chat: target.chat, ok: true, delivered, expected, items };
     } catch (err) {
       stats.lastError = err.message;
       stats.lastErrorAt = Date.now();
-      return { name: target.name, chat: target.chat, ok: false, delivered: 0, expected, error: err.message };
+      return { name: target.name, chat: target.chat, ok: false, delivered: 0, expected, error: err.message, items };
     }
   }
 
@@ -133,20 +192,25 @@ export class Scheduler {
     return delivered;
   }
 
-  #recordRun({ type, manual, items, results }) {
+  #recordRun({ type, manual, itemsByTarget, results }) {
     const { state } = this.store;
-    const ok = results.filter((result) => result.ok).length;
-    const picked = new Set(items);
+    const okResults = results.filter((result) => result.ok);
+    const ok = okResults.length;
     let note = '';
 
     if (ok > 0) {
-      for (const item of items) {
-        item.sends += 1;
-        item.lastSentAt = Date.now();
+      const deliveredItems = new Set();
+      for (const res of okResults) {
+        for (const item of res.items) {
+          item.sends = (item.sends || 0) + 1;
+          item.lastSentAt = Date.now();
+          deliveredItems.add(item);
+        }
       }
+
       if (type === 'new') {
-        state.queue = state.queue.filter((item) => !picked.has(item));
-        state.library.push(...items);
+        state.queue = state.queue.filter((item) => !deliveredItems.has(item));
+        state.library.push(...deliveredItems);
         state.library = state.library.slice(-MAX_LIBRARY);
       }
       // Telegram skips posts it can't send without returning an error.
@@ -156,23 +220,25 @@ export class Scheduler {
     } else if (results.every((result) => MISSING_MESSAGE.test(result.error))) {
       // Every post in the batch was deleted from the main channel. Without
       // this they would sit at the front of the queue and block it forever.
-      state.queue = state.queue.filter((item) => !picked.has(item));
-      state.library = state.library.filter((item) => !picked.has(item));
-      note = `Removed ${items.length} posts that no longer exist in the main channel`;
+      const allAttempted = new Set(results.flatMap((r) => r.items));
+      state.queue = state.queue.filter((item) => !allAttempted.has(item));
+      state.library = state.library.filter((item) => !allAttempted.has(item));
+      note = `Removed ${allAttempted.size} posts that no longer exist in the main channel`;
     } else if (type === 'new') {
       note = 'Every channel failed, so these posts stay in the queue for the next run';
     }
 
+    const postsPerChannel = itemsByTarget[0]?.items?.length ?? 0;
     const run = {
       at: Date.now(),
       type,
       manual,
-      posts: items.length,
+      posts: postsPerChannel,
       ok,
       failed: results.length - ok,
       delivered: results.reduce((sum, result) => sum + result.delivered, 0),
       note,
-      results,
+      results: results.map(({ items, ...rest }) => rest),
     };
     state.runs = [run, ...state.runs].slice(0, MAX_RUNS);
     this.store.save();
