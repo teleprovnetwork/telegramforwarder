@@ -158,6 +158,7 @@ test('full flow, including a restart that wipes the disk', { timeout: 60_000 }, 
   assert.equal((await fetch(`${base}/`)).status, 401);
   assert.equal((await webhook({}, 'wrong')).status, 401);
   assert.equal((await fetch(`${base}/ping`)).status, 200);
+  assert.equal((await fetch(`${base}/health`)).status, 200);
   const crossSite = await fetch(`${base}/run`, {
     method: 'POST',
     headers: { authorization: AUTH, origin: 'https://evil.example' },

@@ -83,9 +83,14 @@ export function createWeb({ store, tg, scheduler, env, bot }) {
   app.disable('x-powered-by');
 
   // Uptime pings keep the service awake and double as a scheduler heartbeat.
-  app.get('/ping', (req, res) => {
+  app.get(['/ping', '/health'], (req, res) => {
     scheduler.tick();
     res.type('text').send('ok');
+  });
+
+  app.head(['/ping', '/health'], (req, res) => {
+    scheduler.tick();
+    res.status(200).end();
   });
 
   app.post('/telegram/webhook', express.json({ limit: '1mb' }), (req, res) => {

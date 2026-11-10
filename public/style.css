@@ -166,3 +166,20 @@ textarea { font: 13px/1.5 ui-monospace, Consolas, monospace; resize: vertical; }
   gap: 12px;
   align-items: end;
 }
+
+details.collapsible {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+details.collapsible summary {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+details.collapsible[open] summary {
+  margin-bottom: 12px;
+}
